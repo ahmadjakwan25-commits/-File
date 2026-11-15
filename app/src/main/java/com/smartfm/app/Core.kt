@@ -141,7 +141,7 @@ class VM(app: Application) : AndroidViewModel(app) {
 
     fun setPref(k: String, v: Boolean) { p.edit().putBoolean(k, v).apply() }
     fun setLang(l: String) { LANG = l; p.edit().putString("lang", l).apply() }
-    fun setPin(s: String) { pin = if (s.isEmpty()) "" else sha(s); p.edit().putString("pin", pin).apply() }
+    fun savePin(s: String) { pin = if (s.isEmpty()) "" else sha(s); p.edit().putString("pin", pin).apply() }
     fun toast(s: String) { if (notif) viewModelScope.launch(Dispatchers.Main) { Toast.makeText(ctx, s, Toast.LENGTH_SHORT).show() } }
 
     fun go(s: String) { stack.add(screen); screen = s; clearSel() }

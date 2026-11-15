@@ -520,8 +520,8 @@ fun metaOf(vm: VM, f: File): String {
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text(tr("নিরাপত্তা", "Security"), fontWeight = FontWeight.Bold)
         Row {
-            Button(onClick = { vm.dlg = Dlg.Ask(tr("নতুন পিন (৪+ সংখ্যা)", "New PIN (4+ digits)"), "", true) { if (it.length >= 4) { vm.setPin(it); vm.toast(tr("পিন সেট হয়েছে", "PIN set")) } else vm.toast(tr("অন্তত ৪ সংখ্যা", "At least 4 digits")) } }) { Text(if (vm.pin.isEmpty()) tr("পিন সেট করুন", "Set PIN") else tr("পিন বদলান", "Change PIN")) }
-            if (vm.pin.isNotEmpty()) { Spacer(Modifier.width(8.dp)); OutlinedButton(onClick = { vm.setPin(""); vm.bio = false; vm.setPref("bio", false) }) { Text(tr("পিন বন্ধ", "Remove PIN")) } }
+            Button(onClick = { vm.dlg = Dlg.Ask(tr("নতুন পিন (৪+ সংখ্যা)", "New PIN (4+ digits)"), "", true) { if (it.length >= 4) { vm.savePin(it); vm.toast(tr("পিন সেট হয়েছে", "PIN set")) } else vm.toast(tr("অন্তত ৪ সংখ্যা", "At least 4 digits")) } }) { Text(if (vm.pin.isEmpty()) tr("পিন সেট করুন", "Set PIN") else tr("পিন বদলান", "Change PIN")) }
+            if (vm.pin.isNotEmpty()) { Spacer(Modifier.width(8.dp)); OutlinedButton(onClick = { vm.savePin(""); vm.bio = false; vm.setPref("bio", false) }) { Text(tr("পিন বন্ধ", "Remove PIN")) } }
         }
         if (vm.pin.isNotEmpty() && act.bioAvailable()) Sw(tr("ফিঙ্গারপ্রিন্ট লক", "Fingerprint lock"), vm.bio) { vm.bio = it; vm.setPref("bio", it) }
         else if (vm.pin.isNotEmpty()) Text(tr("এই ডিভাইসে ফিঙ্গারপ্রিন্ট সমর্থিত নয় বা সেট করা নেই।", "Fingerprint not available on this device."), fontSize = 12.sp)
