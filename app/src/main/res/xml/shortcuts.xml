@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="search" android:enabled="true" android:icon="@drawable/ic_launcher" android:shortcutShortLabel="@string/sc_search">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.smartfm.app" android:targetClass="com.smartfm.app.MainActivity">
+            <extra android:name="go" android:value="search" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="storage" android:enabled="true" android:icon="@drawable/ic_launcher" android:shortcutShortLabel="@string/sc_storage">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.smartfm.app" android:targetClass="com.smartfm.app.MainActivity">
+            <extra android:name="go" android:value="storage" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="bin" android:enabled="true" android:icon="@drawable/ic_launcher" android:shortcutShortLabel="@string/sc_bin">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.smartfm.app" android:targetClass="com.smartfm.app.MainActivity">
+            <extra android:name="go" android:value="bin" />
+        </intent>
+    </shortcut>
+</shortcuts>
