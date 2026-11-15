@@ -27,7 +27,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -43,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 fun titleOf(s: String) = when (s) {
     "home" -> tr("স্মার্ট ফাইল ম্যানেজার", "Smart File Manager")
@@ -56,15 +60,25 @@ fun titleOf(s: String) = when (s) {
 }
 val MAIN = listOf("home" to "🏠", "files" to "📁", "search" to "🔍", "tools" to "🧰", "settings" to "⚙️")
 
+private val PAST = listOf(0xFFEADCF8, 0xFFFFE3D4, 0xFFFFD9E6, 0xFFD9ECFF, 0xFFFFF3CC, 0xFFD8F3E3, 0xFFE3EAF0, 0xFFFFE9A8)
+@Composable fun pastelAt(i: Int): Color {
+    val c = Color(PAST[Math.floorMod(i, PAST.size)])
+    return if (MaterialTheme.colorScheme.background.luminance() < 0.5f) c.copy(alpha = .20f) else c.copy(alpha = .9f)
+}
+@Composable fun tint(f: File): Color = if (f.isDirectory) pastelAt(7) else pastelAt(catOf(f).ordinal)
+
 @Composable fun App(vm: VM, act: MainActivity) {
-    val cs = if (vm.dark) darkColorScheme(primary = Color(0xFF38B3D9), secondary = Color(0xFFF2B632))
-    else lightColorScheme(primary = Color(0xFF0D6A8A), secondary = Color(0xFFF2B632))
+    val cs = if (vm.dark) darkColorScheme(primary = Color(0xFF4FD1C5), secondary = Color(0xFFF2B632), surface = Color(0xFF14232B), surfaceVariant = Color(0xFF22343D), primaryContainer = Color(0xFF1C4A4A))
+    else lightColorScheme(primary = Color(0xFF0F8B8D), secondary = Color(0xFFF2B632), surface = Color(0xFFFFFFFF), surfaceVariant = Color(0xFFDDEBEF), primaryContainer = Color(0xFFCDEFEA))
+    val bg = if (vm.dark) listOf(Color(0xFF0B1A1F), Color(0xFF10202B), Color(0xFF17172C)) else listOf(Color(0xFFD6F2EE), Color(0xFFE9F3FB), Color(0xFFF3ECFB))
     MaterialTheme(colorScheme = cs) {
-        Surface(Modifier.fillMaxSize()) {
-            when {
-                !act.granted -> PermScreen(act)
-                vm.locked -> LockScreen(vm, act)
-                else -> Main(vm, act)
+        Surface(Modifier.fillMaxSize(), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(bg))) {
+                when {
+                    !act.granted -> PermScreen(act)
+                    vm.locked -> LockScreen(vm, act)
+                    else -> Main(vm, act)
+                }
             }
         }
     }
@@ -108,10 +122,10 @@ val MAIN = listOf("home" to "🏠", "files" to "📁", "search" to "🔍", "tool
             else -> vm.nav("home")
         }
     }
-    Scaffold(topBar = { TopBar(vm) }, bottomBar = {
+    Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, topBar = { TopBar(vm) }, bottomBar = {
         Column {
             if (vm.selMode && vm.sel.isNotEmpty()) BulkBar(vm, act)
-            NavigationBar {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .95f)) {
                 MAIN.forEach { (k, i) ->
                     NavigationBarItem(selected = vm.screen == k, onClick = { vm.nav(k) }, icon = { Text(i, fontSize = 20.sp) },
                         label = { Text(if (k == "home") tr("হোম", "Home") else titleOf(k), fontSize = 11.sp) })
@@ -125,8 +139,8 @@ val MAIN = listOf("home" to "🏠", "files" to "📁", "search" to "🔍", "tool
                 "tools" -> ToolsScreen(vm); "settings" -> SettingsScreen(vm, act); "storage" -> StorageScreen(vm)
                 "bin" -> BinScreen(vm); "fav" -> FavScreen(vm); "dups" -> DupsScreen(vm); "sus" -> SusScreen(vm)
                 "quar" -> QuarScreen(vm); "priv" -> PrivScreen(vm, act); "cloud" -> CloudScreen(vm)
-                "apk" -> ListScreen(vm, vm.all.filter { it.extension.equals("apk", true) })
-                "zips" -> ListScreen(vm, vm.all.filter { catOf(it) == Cat.ARC })
+                "apk" -> ListScreen(vm, vm.apkList)
+                "zips" -> ListScreen(vm, vm.arcList)
             }
         }
     }
@@ -135,9 +149,12 @@ val MAIN = listOf("home" to "🏠", "files" to "📁", "search" to "🔍", "tool
 
 @Composable fun TopBar(vm: VM) {
     val main = MAIN.any { it.first == vm.screen }
-    TopAppBar(title = { Text(titleOf(vm.screen), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = { if (!main) TextButton(onClick = { vm.back() }) { Text("←", fontSize = 22.sp) } },
-        actions = { if (vm.screen != "search") TextButton(onClick = { vm.go("search") }) { Text("🔍", fontSize = 20.sp) } })
+    val w = Color.White
+    TopAppBar(
+        title = { Text(titleOf(vm.screen), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = { if (!main) TextButton(onClick = { vm.back() }) { Text("←", fontSize = 22.sp, color = w) } },
+        actions = { if (vm.screen != "search") TextButton(onClick = { vm.go("search") }) { Text("🔍", fontSize = 20.sp) } },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = if (vm.dark) Color(0xFF173B40) else Color(0xFF0F8B8D), titleContentColor = w))
 }
 
 @Composable fun BulkBar(vm: VM, act: MainActivity) {
@@ -169,7 +186,7 @@ val MAIN = listOf("home" to "🏠", "files" to "📁", "search" to "🔍", "tool
 }
 
 @Composable fun Thumb(f: File, sel: Boolean, mode: Boolean, size: Dp = 44.dp) {
-    Box(Modifier.size(size).clip(RoundedCornerShape(8.dp)).background(if (f.isDirectory) Color(0xFFF2B632) else MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(size).clip(RoundedCornerShape(10.dp)).background(tint(f)), contentAlignment = Alignment.Center) {
         if (mode) Text(if (sel) "✅" else "⬜", fontSize = 22.sp)
         else if (f.isFile && catOf(f) == Cat.IMG) AsyncImage(f, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Text(if (f.isDirectory) "📁" else catOf(f).icon, fontSize = 22.sp)
@@ -182,15 +199,18 @@ fun metaOf(vm: VM, f: File): String {
 }
 
 @Composable fun FileItem(vm: VM, f: File, sub: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
-    val sel = f.absolutePath in vm.sel; val warn = f.isFile && why(f).isNotEmpty()
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp))
-        .background(if (sel) MaterialTheme.colorScheme.primary.copy(.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(.5f))
+    val sel = f.absolutePath in vm.sel
+    val warn = remember(f) { f.isFile && why(f).isNotEmpty() }
+    val m = remember(f, vm.showSize, vm.showDate, vm.tick, LANG) { metaOf(vm, f) }
+    val meta = sub ?: m
+    val bg = if (sel) MaterialTheme.colorScheme.primary.copy(.28f) else tint(f)
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp)).background(bg)
         .combinedClickable(onClick = { if (vm.selMode) vm.toggleSel(f) else (onClick ?: { vm.tap(f) })() }, onLongClick = { vm.selMode = true; if (!sel) vm.toggleSel(f) })
         .padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         Thumb(f, sel, vm.selMode)
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text((if (f.absolutePath in vm.favs) "⭐ " else "") + (if (warn) "⚠️ " else "") + f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(sub ?: metaOf(vm, f), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(meta, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         trailing()
     }
@@ -198,7 +218,7 @@ fun metaOf(vm: VM, f: File): String {
 
 @Composable fun GridCell(vm: VM, f: File) {
     val sel = f.absolutePath in vm.sel
-    Column(Modifier.padding(3.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) MaterialTheme.colorScheme.primary.copy(.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(.5f))
+    Column(Modifier.padding(3.dp).clip(RoundedCornerShape(14.dp)).background(if (sel) MaterialTheme.colorScheme.primary.copy(.28f) else tint(f))
         .combinedClickable(onClick = { if (vm.selMode) vm.toggleSel(f) else vm.tap(f) }, onLongClick = { vm.selMode = true; if (!sel) vm.toggleSel(f) }).padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Thumb(f, sel, vm.selMode, 72.dp)
@@ -208,7 +228,7 @@ fun metaOf(vm: VM, f: File): String {
 }
 
 @Composable fun ItemRow(icon: String, title: String, sub: String? = null, onClick: () -> Unit = {}, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(.5f)).clickable(onClick = onClick).padding(12.dp),
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp)).background(pastelAt(Math.abs(icon.hashCode()))).clickable(onClick = onClick).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(icon, fontSize = 24.sp)
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
@@ -254,7 +274,7 @@ fun metaOf(vm: VM, f: File): String {
         Triple("sus", "⚠️", tr("সন্দেহজনক", "Suspicious")), Triple("quar", "🧪", tr("কোয়ারেন্টাইন", "Quarantine")), Triple("cloud", "☁️", tr("ক্লাউড", "Cloud")))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .88f))) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Donut(p, 96.dp, num("${(p * 100).toInt()}%"))
                     Column(Modifier.padding(start = 14.dp)) {
@@ -265,7 +285,7 @@ fun metaOf(vm: VM, f: File): String {
                 Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                     listOf(Cat.IMG, Cat.VID, Cat.AUD, Cat.DOC).forEach { c ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(num("${vm.all.count { catOf(it) == c }}"), fontWeight = FontWeight.Bold, fontSize = 18.sp); Text(c.icon + " " + c.label, fontSize = 12.sp)
+                            Text(num("${vm.catCount[c] ?: 0}"), fontWeight = FontWeight.Bold, fontSize = 18.sp); Text(c.icon + " " + c.label, fontSize = 12.sp)
                         }
                     }
                 }
@@ -274,10 +294,10 @@ fun metaOf(vm: VM, f: File): String {
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                tiles.chunked(3).forEach { r ->
+                tiles.chunked(3).forEachIndexed { ri, r ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        r.forEach { (s, i, l) ->
-                            Card(Modifier.weight(1f).clickable { vm.go(s) }) {
+                        r.forEachIndexed { ci, (s, i, l) ->
+                            Card(Modifier.weight(1f).clickable { vm.go(s) }, colors = CardDefaults.cardColors(containerColor = pastelAt(ri * 3 + ci))) {
                                 Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(i, fontSize = 26.sp); Text(l, fontSize = 13.sp) }
                             }
                         }
@@ -291,13 +311,14 @@ fun metaOf(vm: VM, f: File): String {
             item { Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { fd.forEach { d -> AssistChip(onClick = { vm.tap(d) }, label = { Text("📁 " + d.name) }) } } }
         }
         item { Text(tr("সাম্প্রতিক ফাইল", "Recent files"), fontWeight = FontWeight.Bold) }
-        items(vm.all.sortedByDescending { it.lastModified() }.take(6), key = { it.path }) { FileItem(vm, it) }
+        items(vm.recent, key = { it.path }) { FileItem(vm, it) }
     }
 }
 
 @Composable fun FilesScreen(vm: VM) {
-    val ctx = LocalContext.current
-    val fl = remember(vm.cwd, vm.tick, vm.sort, vm.asc, vm.flt) { vm.list() }
+    var fl by remember { mutableStateOf<List<File>>(emptyList()) }
+    var busy by remember { mutableStateOf(true) }
+    LaunchedEffect(vm.cwd, vm.tick, vm.sort, vm.asc, vm.flt) { busy = true; fl = withContext(Dispatchers.IO) { vm.list() }; busy = false }
     val parts = generateSequence(vm.cwd) { if (it == P.root) null else it.parentFile }.takeWhile { it.path.startsWith(P.root.path) }.toList().reversed()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -312,7 +333,8 @@ fun metaOf(vm: VM, f: File): String {
         }
         SortBar(vm)
         CatChips(vm.flt) { vm.flt = it }
-        if (fl.isEmpty()) Empty(tr("ফোল্ডারটি খালি", "This folder is empty"))
+        if (busy && fl.isEmpty()) Empty(tr("লোড হচ্ছে…", "Loading…"))
+        else if (fl.isEmpty()) Empty(tr("ফোল্ডারটি খালি", "This folder is empty"))
         else if (vm.grid) LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(8.dp)) { gridItems(fl, key = { it.path }) { GridCell(vm, it) } }
         else LazyColumn(contentPadding = PaddingValues(12.dp)) { items(fl, key = { it.path }) { FileItem(vm, it) } }
     }
@@ -320,18 +342,18 @@ fun metaOf(vm: VM, f: File): String {
 
 @Composable fun CatsScreen(vm: VM) {
     var open by remember { mutableStateOf<Cat?>(null) }
-    if (open == null) {
+    val oc = open
+    if (oc == null) {
         LazyColumn(contentPadding = PaddingValues(12.dp)) {
             items(Cat.values().toList()) { c ->
-                val l = vm.all.filter { catOf(it) == c }
-                ItemRow(c.icon, c.label, num("${l.size}") + tr("টি ফাইল · ", " files · ") + sizeStr(l.sumOf { it.length() }), { open = c })
+                ItemRow(c.icon, c.label, num("${vm.catCount[c] ?: 0}") + tr("টি ফাইল · ", " files · ") + sizeStr(vm.catSize[c] ?: 0L), { open = c })
             }
         }
     } else {
-        val c = open!!
-        val l = vm.all.filter { catOf(it) == c }.let { a ->
-            val s = when (vm.sort) { "size" -> a.sortedBy { it.length() }; "date" -> a.sortedBy { it.lastModified() }; else -> a.sortedBy { it.name.lowercase() } }
-            if (vm.asc) s else s.reversed()
+        val l = remember(oc, vm.recs, vm.sort, vm.asc) {
+            val a = vm.recs.filter { it.cat == oc }
+            val x = when (vm.sort) { "size" -> a.sortedBy { it.size }; "date" -> a.sortedBy { it.mod }; else -> a.sortedBy { it.f.name.lowercase() } }
+            (if (vm.asc) x else x.reversed()).map { it.f }
         }
         BackHandler { open = null }
         Column {
@@ -345,8 +367,9 @@ fun metaOf(vm: VM, f: File): String {
 @Composable fun SearchScreen(vm: VM) {
     var q by remember { mutableStateOf("") }; var ex by remember { mutableStateOf("") }
     var cat by remember { mutableStateOf<Cat?>(null) }; var here by remember { mutableStateOf(false) }
-    val res = remember(q, ex, cat, here, vm.all) {
-        vm.all.filter { (q.isBlank() || it.name.contains(q, true)) && (cat == null || catOf(it) == cat) && (ex.isBlank() || it.extension.equals(ex.trim('.', ' '), true)) && (!here || it.startsWith(vm.cwd)) }.take(300)
+    val res = remember(q, ex, cat, here, vm.recs) {
+        val e = ex.trim('.', ' ')
+        vm.recs.filter { (q.isBlank() || it.f.name.contains(q, true)) && (cat == null || it.cat == cat) && (e.isBlank() || it.f.extension.equals(e, true)) && (!here || it.f.startsWith(vm.cwd)) }.take(300).map { it.f }
     }
     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item { OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(tr("ফাইলের নাম লিখুন", "File name")) }) }
@@ -377,11 +400,11 @@ fun metaOf(vm: VM, f: File): String {
 
 @Composable fun StorageScreen(vm: VM) {
     val st = remember(vm.tick) { vm.storage() }; val used = st.first - st.second
-    val by = vm.all.groupBy { catOf(it) }.mapValues { e -> e.value.sumOf { it.length() } }
-    val sum = (by.values.sum()).coerceAtLeast(1L)
+    val by = vm.catSize
+    val sum = by.values.sum().coerceAtLeast(1L)
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .88f))) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Donut(if (st.first > 0) used.toFloat() / st.first else 0f, 100.dp, num("${if (st.first > 0) (used * 100 / st.first) else 0}%"))
                     Column(Modifier.padding(start = 14.dp)) { Text(tr("মোট: ", "Total: ") + sizeStr(st.first)); Text(tr("ব্যবহৃত: ", "Used: ") + sizeStr(used)); Text(tr("খালি: ", "Free: ") + sizeStr(st.second)) }
@@ -398,7 +421,7 @@ fun metaOf(vm: VM, f: File): String {
             }
         }
         item { Text(tr("সবচেয়ে বড় ফাইল", "Largest files"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
-        items(vm.all.sortedByDescending { it.length() }.take(15), key = { it.path }) { FileItem(vm, it, sizeStr(it.length()) + if (it.length() >= 50_000_000) tr(" · বড় ফাইল", " · large") else "") }
+        items(vm.largest, key = { it.path }) { FileItem(vm, it, sizeStr(it.length()) + if (it.length() >= 50_000_000) tr(" · বড় ফাইল", " · large") else "") }
     }
 }
 
@@ -447,7 +470,7 @@ fun metaOf(vm: VM, f: File): String {
 }
 
 @Composable fun SusScreen(vm: VM) {
-    val l = remember(vm.all) { vm.suspicious() }
+    val l = vm.susList
     LazyColumn(contentPadding = PaddingValues(12.dp)) {
         item { Text(tr("ফাইলের নাম ও এক্সটেনশন দেখে সম্ভাব্য ঝুঁকি চিহ্নিত করা হয়। এটি অ্যান্টিভাইরাস নয়।", "Flags risky names and extensions. This is not an antivirus."), fontSize = 12.sp) }
         if (l.isEmpty()) item { Empty("✅ " + tr("সন্দেহজনক ফাইল পাওয়া যায়নি", "Nothing suspicious found")) }

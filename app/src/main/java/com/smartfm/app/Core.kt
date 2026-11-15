@@ -56,6 +56,7 @@ enum class Cat(val bn: String, val en: String, val icon: String, val exts: Set<S
     OTH("অন্যান্য", "Other", "📎", emptySet());
     val label get() = tr(bn, en)
 }
+class Rec(val f: File, val size: Long, val mod: Long, val cat: Cat)
 fun catOf(f: File): Cat { val e = f.extension.lowercase(); return Cat.values().firstOrNull { e in it.exts } ?: Cat.OTH }
 
 object P {
@@ -133,6 +134,14 @@ class VM(app: Application) : AndroidViewModel(app) {
     val favs = mutableStateListOf<String>().apply { addAll(p.getStringSet("favs", emptySet()) ?: emptySet()) }
     var all by mutableStateOf<List<File>>(emptyList())
     var scanning by mutableStateOf(false)
+    var recs by mutableStateOf<List<Rec>>(emptyList())
+    var catCount by mutableStateOf<Map<Cat, Int>>(emptyMap())
+    var catSize by mutableStateOf<Map<Cat, Long>>(emptyMap())
+    var recent by mutableStateOf<List<File>>(emptyList())
+    var largest by mutableStateOf<List<File>>(emptyList())
+    var susList by mutableStateOf<List<File>>(emptyList())
+    var apkList by mutableStateOf<List<File>>(emptyList())
+    var arcList by mutableStateOf<List<File>>(emptyList())
     var tick by mutableStateOf(0)
     var dlg by mutableStateOf<Dlg?>(null)
     private var job: Job? = null
@@ -155,12 +164,13 @@ class VM(app: Application) : AndroidViewModel(app) {
 
     fun list(): List<File> {
         val a = (cwd.listFiles()?.toList() ?: emptyList()).filter { !it.name.startsWith(".") && (flt == null || it.isDirectory || catOf(it) == flt) }
-        val cmp: Comparator<File> = when (sort) {
-            "size" -> compareBy<File> { if (it.isDirectory) 0L else it.length() }
-            "date" -> compareBy<File> { it.lastModified() }
-            else -> Comparator<File> { x, y -> x.name.compareTo(y.name, true) }
+        val e = a.map { Rec(it, if (it.isDirectory) 0L else it.length(), it.lastModified(), Cat.OTH) }
+        val cmp: Comparator<Rec> = when (sort) {
+            "size" -> compareBy<Rec> { it.size }
+            "date" -> compareBy<Rec> { it.mod }
+            else -> Comparator<Rec> { x, y -> x.f.name.compareTo(y.f.name, true) }
         }
-        val s = a.sortedWith(if (asc) cmp else cmp.reversed())
+        val s = e.sortedWith(if (asc) cmp else cmp.reversed()).map { it.f }
         return s.filter { it.isDirectory } + s.filter { !it.isDirectory }
     }
 
@@ -171,7 +181,17 @@ class VM(app: Application) : AndroidViewModel(app) {
             val q = P.quar
             val r = P.root.walkTopDown().onEnter { isActive && it.name != "Android" && !it.name.startsWith(".") }
                 .filter { it.isFile && !it.name.startsWith(".") && !it.startsWith(q) }.toList()
-            withContext(Dispatchers.Main) { all = r; scanning = false }
+            val rc = r.map { Rec(it, it.length(), it.lastModified(), catOf(it)) }
+            val cc = rc.groupingBy { it.cat }.eachCount()
+            val cs = rc.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.size } }
+            val rec = rc.sortedByDescending { it.mod }.take(6).map { it.f }
+            val big = rc.sortedByDescending { it.size }.take(15).map { it.f }
+            val sl = r.filter { why(it).isNotEmpty() }
+            val ap = r.filter { it.extension.equals("apk", true) }
+            val ar = rc.filter { it.cat == Cat.ARC }.map { it.f }
+            withContext(Dispatchers.Main) {
+                all = r; recs = rc; catCount = cc; catSize = cs; recent = rec; largest = big; susList = sl; apkList = ap; arcList = ar; scanning = false
+            }
         }
     }
     fun refresh() { tick++; scan() }
@@ -242,7 +262,7 @@ class VM(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- quarantine ----
-    fun suspicious() = all.filter { why(it).isNotEmpty() }
+    fun suspicious() = susList
     fun quarantine(fs: List<File>) = io {
         val m = meta("quar")
         fs.forEach { val t = uniq(P.quar, it.name); it.copyTo(t); m[t.name] = it.absolutePath }
